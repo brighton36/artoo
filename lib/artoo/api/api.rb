@@ -1,6 +1,7 @@
 require 'reel'
 require 'artoo/api/route_helpers'
 require 'artoo/api/device_event_client'
+require 'artoo/api/command_client'
 
 module Artoo
   module Api
@@ -82,6 +83,13 @@ module Artoo
       # @return [nil]
       get_ws '/robots/:robotid/devices/:deviceid/events' do
         DeviceEventClient.new(@req.websocket, device(@params['robotid'], @params['deviceid']).event_topic_name('update'))
+        return nil
+      end
+
+      # Execute robot commands
+      # @return [nil]
+      get_ws '/commands' do
+        CommandClient.new @req.websocket
         return nil
       end
 
