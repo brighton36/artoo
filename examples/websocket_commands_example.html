@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html xmlns='http://www.w3.org/1999/xhtml'>
+  <meta content='text/html; charset=utf-8' http-equiv='content-type'>
+  <head>
+    <title>Artoo Websocket Command API</title>
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script>
+    //<![CDATA[
+    $(document).ready(function() {
+      Socket = ("MozWebSocket" in window) ? MozWebSocket : WebSocket;
+
+      function add_option(select, value) {
+        select.append($('<option>', {value: value, class:'dynamic'}).text(value)); 
+      }
+    
+      $('#connect').click(function() {
+        if (window.ws) {
+          $('.dynamic').remove();
+          $('#step_one input[type=text]').attr('disabled', false);
+          window.ws.close();
+          window.ws = null;
+        } else {
+          $('#step_one input[type=text]').attr('disabled', true);
+          hostname = $('#hostname').attr('value');
+          port = $('#port').attr('value');
+
+          window.ws = new Socket('ws://'+hostname+':'+port+'/commands');
+
+          window.ws.onmessage = function(evt) { 
+            response = JSON.parse(evt.data);
+            
+            switch (response.requestid) {
+              case 'robots':
+                $.each(response.result , function( i, robot ) {
+                  add_option($('#robots'), robot.name); });
+                break;
+              case 'robot_commands':
+                $.each(response.result , function( i, command ) {
+                  add_option($('#robot_commands'), command ); });
+                break;
+              case 'robot_devices':
+                $.each(response.result , function( i, device ) {
+                  add_option($('#robot_devices'), device.name ); });
+                break;
+              case 'robot_connections':
+                // Since there's no interactivity here, this one's a little 
+                // different than the other requests:
+                $.each(response.result , function( i, connection ) {
+                  $('#robot_connections').append('<li class="dynamic">'+connection.name+'</li>');
+                });
+                break;
+              case 'robot_device_commands':
+                $.each(response.result , function( i, device_command ) {
+                  add_option($('#robot_device_commands'), device_command);
+                });
+                break;
+            }
+          };
+          
+          window.ws.onclose = function() {
+            $("#socket_state span").html('Disconnected');
+            $('#connect').attr('value', 'Connect');
+          }
+
+          window.ws.onopen = function() {
+            $("#socket_state span").html('Connected');
+
+            // Let's go ahead and see what's available to us:
+            window.ws.send(JSON.stringify({requestid: 'robots'}));
+            $('#connect').attr('value', 'Disconnect');
+          };
+        }
+      });
+
+      $('#robots').change(function() {
+        selected_robot = $(this).find('option:selected').attr('value');
+
+        // Remove any existing dynamic entries:
+        $('#step_three .dynamic').remove();
+
+        // Populate new entries
+        if (selected_robot && window.ws) {
+          robot_requests = ['robot_commands', 'robot_devices', 'robot_connections']
+
+          $.each(robot_requests, function( i, request ) {
+            window.ws.send(JSON.stringify({requestid: request, robotid: selected_robot}));
+          });
+        }
+      });
+
+      $('#robot_devices').change(function() {
+        selected_robot = $('#robots option:selected').attr('value');
+        selected_device = $(this).find('option:selected').attr('value');
+
+        // Clear the device_commands
+        $('#robot_device_commands .dynamic').remove();
+
+        // Populate new entries:
+        if (selected_robot && selected_device && window.ws) {
+          window.ws.send(JSON.stringify({requestid: 'robot_device_commands', 
+            robotid: selected_robot, deviceid: selected_device }));
+        }
+      });
+
+    });
+    //]]>
+    </script>
+    <style>
+      .panel{ display:block; float:left; width:33% }
+      .row{ display:block; clear:both}
+    </style>
+  </head>
+  <body>
+    <h1>Artoo Websocket Command API</h1>
+    <p>This page is meant to serve as an easy-to-follow walkthrough of the websockets
+    api, and how to use various functions of the API.</p>
+    <h2>Step 1: Connect to the server</h2>
+    <div class="row" id="step_one">
+      <p>
+        <strong>Hostname:</strong>
+        <input id="hostname" type="text" name="hostname" value="localhost">
+      </p>
+      <p>
+        <strong>Port:</strong>
+        <input id="port" type="text" name="port" value="8023">
+      </p>
+      <p id="socket_state"><strong>Socket State:</strong><span>Disconnected</span></p>
+      <input id="connect" type="button" value="Connect">
+    </div>
+    <h2>Step 2: Choose your robot</h2>
+    <div class="row">
+      <p><strong>Robot:</strong> <select id="robots"><option>(Choose a Robot)</option></select></p>
+    </div>
+    <h2>Step 3: Do Something!</h2>
+    <div class="row" id="step_three">
+      <div class="panel">
+        <h3>Run a Robot Command:</h3>
+        <p>
+          <strong>Command:</strong>
+          <select id="robot_commands"><option>(Choose a Command)</option></select>
+        </p>
+        <input type="button" value="Execute">
+      </div>
+      <div class="panel">
+        <h3>Run a Device Command:</h3>
+        <p>
+          <strong>Device:</strong>
+          <select id="robot_devices"><option>(Choose a Device)</option></select>
+        </p>
+        <p>
+          <strong>Device Command:</strong> 
+          <select id="robot_device_commands"><option>(Choose a Device Command)</option></select>
+        </p>
+        <input type="button" value="Execute">
+      </div>
+      <div class="panel">
+        <h3>Connections:</h3>
+        <p>This mostly here to demonstrate the connection enumeration features</p>
+        <ul id="robot_connections"></ul>
+      </div>
+    </div>
+  </body>
+</html>
