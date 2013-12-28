@@ -12,15 +12,25 @@
       function add_option(select, value) {
         select.append($('<option>', {value: value, class:'dynamic'}).text(value)); 
       }
+
+      function selected_value(select) {
+        return $(select).find('option:selected').attr('value');
+      }
+
+      function append_li(ul, contents) {
+        ul.append('<li class="dynamic">'+contents+'</li>');
+      }
     
       $('#connect').click(function() {
         if (window.ws) {
           $('.dynamic').remove();
-          $('#step_one input[type=text]').attr('disabled', false);
+          $('#step_one input[type=text], #step_three button').attr('disabled', false);
+
           window.ws.close();
           window.ws = null;
         } else {
           $('#step_one input[type=text]').attr('disabled', true);
+
           hostname = $('#hostname').attr('value');
           port = $('#port').attr('value');
 
@@ -29,7 +39,7 @@
           window.ws.onmessage = function(evt) { 
             response = JSON.parse(evt.data);
             
-            switch (response.requestid) {
+            switch (response.request.requestid) {
               case 'robots':
                 $.each(response.result , function( i, robot ) {
                   add_option($('#robots'), robot.name); });
@@ -46,13 +56,19 @@
                 // Since there's no interactivity here, this one's a little 
                 // different than the other requests:
                 $.each(response.result , function( i, connection ) {
-                  $('#robot_connections').append('<li class="dynamic">'+connection.name+'</li>');
+                  append_li($('#robot_connections'), connection.name);
                 });
                 break;
               case 'robot_device_commands':
                 $.each(response.result , function( i, device_command ) {
                   add_option($('#robot_device_commands'), device_command);
                 });
+                break;
+              case 'robot_command':
+                append_li($('#command_output'), JSON.stringify(response.result));
+                break;
+              case 'robot_device_command':
+                append_li($('#device_command_output'), JSON.stringify(response.result));
                 break;
             }
           };
@@ -73,10 +89,11 @@
       });
 
       $('#robots').change(function() {
-        selected_robot = $(this).find('option:selected').attr('value');
+        selected_robot = selected_value($(this));
 
         // Remove any existing dynamic entries:
         $('#step_three .dynamic').remove();
+        $('#step_three button').attr('disabled',true);
 
         // Populate new entries
         if (selected_robot && window.ws) {
@@ -88,18 +105,47 @@
         }
       });
 
+      $('#robot_commands').change(function() {
+        selected_command = selected_value($(this));
+        $('#execute_command').attr('disabled', !(selected_command && window.ws));
+      });
+
+      $('#robot_device_commands').change(function() {
+        selected_command = selected_value($(this));
+        $('#execute_device_command').attr('disabled', !(selected_command && window.ws));
+      });
+
       $('#robot_devices').change(function() {
-        selected_robot = $('#robots option:selected').attr('value');
-        selected_device = $(this).find('option:selected').attr('value');
+        selected_robot = selected_value($('#robots'));
+        selected_device = selected_value($(this));
 
         // Clear the device_commands
         $('#robot_device_commands .dynamic').remove();
+        $('#execute_device_command').attr('disabled',true);
 
         // Populate new entries:
         if (selected_robot && selected_device && window.ws) {
           window.ws.send(JSON.stringify({requestid: 'robot_device_commands', 
             robotid: selected_robot, deviceid: selected_device }));
         }
+      });
+
+      $('#execute_command').click(function () {
+        selected_robot = selected_value($('#robots'));
+        selected_command = selected_value($('#robot_commands'));
+
+        window.ws.send(JSON.stringify({requestid: 'robot_command', 
+          robotid: selected_robot, commandid: selected_command}));
+      });
+
+      $('#execute_device_command').click(function () {
+        selected_robot = selected_value($('#robots'));
+        selected_device = selected_value($('#robot_devices'));
+        selected_command = selected_value($('#robot_device_commands'));
+
+        window.ws.send(JSON.stringify({requestid: 'robot_device_command', 
+          robotid: selected_robot, deviceid: selected_device, 
+          commandid: selected_command}));
       });
 
     });
@@ -114,8 +160,8 @@
     <h1>Artoo Websocket Command API</h1>
     <p>This page is meant to serve as an easy-to-follow walkthrough of the websockets
     api, and how to use various functions of the API.</p>
-    <h2>Step 1: Connect to the server</h2>
     <div class="row" id="step_one">
+      <h2>Step 1: Connect to the artoo api server</h2>
       <p>
         <strong>Hostname:</strong>
         <input id="hostname" type="text" name="hostname" value="localhost">
@@ -124,22 +170,30 @@
         <strong>Port:</strong>
         <input id="port" type="text" name="port" value="8023">
       </p>
-      <p id="socket_state"><strong>Socket State:</strong><span>Disconnected</span></p>
+      <p id="socket_state">
+        <strong>Socket State:</strong>
+        <span>Disconnected</span>
+      </p>
       <input id="connect" type="button" value="Connect">
     </div>
-    <h2>Step 2: Choose your robot</h2>
-    <div class="row">
-      <p><strong>Robot:</strong> <select id="robots"><option>(Choose a Robot)</option></select></p>
+    <div class="row" id="step_two">
+      <h2>Step 2: Choose your robot</h2>
+      <p>
+        <strong>Robot:</strong> 
+        <select id="robots"><option>(Choose a Robot)</option></select>
+      </p>
     </div>
-    <h2>Step 3: Do Something!</h2>
     <div class="row" id="step_three">
+      <h2>Step 3: Do Something!</h2>
       <div class="panel">
         <h3>Run a Robot Command:</h3>
         <p>
           <strong>Command:</strong>
           <select id="robot_commands"><option>(Choose a Command)</option></select>
         </p>
-        <input type="button" value="Execute">
+        <button id="execute_command" disabled="disabled">Execute</button>
+        <p>Result(s):</p>
+        <ul id="command_output"></ul>
       </div>
       <div class="panel">
         <h3>Run a Device Command:</h3>
@@ -151,11 +205,13 @@
           <strong>Device Command:</strong> 
           <select id="robot_device_commands"><option>(Choose a Device Command)</option></select>
         </p>
-        <input type="button" value="Execute">
+        <button id="execute_device_command" disabled="disabled">Execute</button>
+        <p>Result(s):</p>
+        <ul id="device_command_output"></ul>
       </div>
       <div class="panel">
         <h3>Connections:</h3>
-        <p>This mostly here to demonstrate the connection enumeration features</p>
+        <p>This is here to demonstrate the connection enumeration features...</p>
         <ul id="robot_connections"></ul>
       </div>
     </div>

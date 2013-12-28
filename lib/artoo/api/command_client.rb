@@ -8,7 +8,6 @@ module Artoo
 
       MESSAGE_POLL_INTERVAL = 1.0/60
       JSON_HASH_SPLITTER = /(?=(\{((?:[^{}]++|\{\g<2>\})++)\}))/
-      
 
       class ApiCommandError < StandardError; end
       class InvalidJson < ApiCommandError; end
@@ -77,7 +76,8 @@ module Artoo
       # Execute robot command
       # @return [JSON] command
       on_request(:robot_command) do |params|
-        master.robot(params[:robotid]).command(params[:commandid], *command_params)
+        master.robot(params[:robotid]).command(params[:commandid], 
+          *(params.has_key? :command_params) ? params[:command_params] : [] )
       end
 
       # Retrieve robot devices
@@ -129,7 +129,6 @@ module Artoo
       # @param [String] m
       def on_message(m)
         each_message(m) do |msg|
-          puts "Message:"+msg.inspect
           raise InvalidMessage unless msg.has_key?(:requestid)
 
           request = msg[:requestid].to_sym
@@ -137,8 +136,8 @@ module Artoo
           raise UnrecognizedCommand unless self.class.request_handlers.has_key? request
 
           result = self.class.request_handlers[request].call(msg)
-
-          write MultiJson.dump({:result => result, :requestid => request})
+          
+          write MultiJson.dump({:result => result, :request => msg})
         end unless m.empty?
 
         nil
