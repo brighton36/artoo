@@ -23,20 +23,16 @@
     
       $('#connect').click(function() {
         if (window.ws) {
-          $('.dynamic').remove();
-          $('#step_one input[type=text], #step_three button').attr('disabled', false);
-
           window.ws.close();
           window.ws = null;
         } else {
-          $('#step_one input[type=text]').attr('disabled', true);
-
-          hostname = $('#hostname').attr('value');
-          port = $('#port').attr('value');
+          hostname = $('#hostname').val();
+          port = $('#port').val();
 
           window.ws = new Socket('ws://'+hostname+':'+port+'/commands');
 
           window.ws.onmessage = function(evt) { 
+            console.log(evt.data);
             response = JSON.parse(evt.data);
             
             switch (response.request.requestid) {
@@ -74,11 +70,15 @@
           };
           
           window.ws.onclose = function() {
+            $('.dynamic').remove();
+            $('#step_one input[type=text], #step_three button').attr('disabled', false);
             $("#socket_state span").html('Disconnected');
             $('#connect').attr('value', 'Connect');
           }
 
           window.ws.onopen = function() {
+            $('#step_one input[type=text]').attr('disabled', true);
+
             $("#socket_state span").html('Connected');
 
             // Let's go ahead and see what's available to us:
@@ -168,7 +168,7 @@
       </p>
       <p>
         <strong>Port:</strong>
-        <input id="port" type="text" name="port" value="8023">
+        <input id="port" type="text" name="port" value="4321">
       </p>
       <p id="socket_state">
         <strong>Socket State:</strong>
